@@ -1,0 +1,24 @@
+# local environment
+.env.*
+
+# compiled output
+/dist
+/node_modules
+/.next
+
+# Logs
+logs
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+lerna-debug.log*
+
+# OS
+.DS_Store
+
+# Docker file
+docker-compose.yml
+
+# IDE
+.vscode

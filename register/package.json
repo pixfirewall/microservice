@@ -1,0 +1,17 @@
+{
+  "name": "register",
+  "version": "1.0.0",
+  "main": "index.js",
+  "scripts": {
+    "start": "node ."
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "description": "",
+  "dependencies": {
+    "bcrypt": "^5.0.1",
+    "ioredis": "^4.27.6",
+    "validator": "^13.6.0"
+  }
+}

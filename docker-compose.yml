@@ -1,0 +1,60 @@
+version: '3.2'
+services:
+  redis:
+    image: redis
+    container_name: redis
+    ports:
+      - 6379:6379
+    networks:
+      - microservice
+
+  email:
+    container_name: email
+    image: email
+    build:
+      context: email/
+    networks:
+      - microservice
+    command: ["npm", "start"]
+    depends_on:
+      - redis
+
+  gateway:
+    container_name: gateway
+    image: gateway
+    build:
+      context: gateway/
+    ports:
+      - 8080:8080
+    networks:
+      - microservice
+    command: ["npm", "start"]
+    depends_on:
+      - redis
+
+  register:
+    container_name: register
+    image: register
+    build:
+      context: register/
+    networks:
+      - microservice
+    command: ["npm", "start"]
+    depends_on:
+      - redis
+
+  frontend:
+    container_name: frontend
+    image: frontend
+    build:
+      context: frontend/
+    ports:
+      - 3000:3000
+    networks:
+      - microservice
+    depends_on:
+      - redis
+
+networks:
+  microservice:
+    driver: bridge
