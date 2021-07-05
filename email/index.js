@@ -1,6 +1,6 @@
 const Redis = require("ioredis");
-const sub = new Redis(6379, "redis");
-const pub = new Redis(6379, "redis");
+const read = new Redis(6379, "redis");
+const write = new Redis(6379, "redis");
 const redis = new Redis(6379, "redis");
 
 /* valid token is required */
@@ -9,26 +9,32 @@ const redis = new Redis(6379, "redis");
 //   domain: "www.test.com",
 // });
 
-sub.subscribe("user-activation", (err, count) => {
-  if (err) console.error(`Activation failed to subscribe: ${err.message}`);
-  else console.log(`Activation is currently subscribed to ${count} channels.`);
-});
+function sendEmail(email) {
+  const data = {
+    from: "Excited User <me@samples.mailgun.org>",
+    to: email,
+    subject: "Account Activation",
+    text: "Your account has been activated!",
+  };
+  mailgun.messages().send(data);
+}
 
-sub.on("message", async (channel, email) => {
-  console.log(`Received on Activation  => ${email} from ${channel}`);
+async function listenForMessage(lastId = "$") {
+  const results = await read.xread(
+    "block",
+    0,
+    "STREAMS",
+    "user-activation",
+    lastId
+  );
+  const [_, messages] = results[0];
+  const email = messages[0][1][1];
+
   try {
-    console.log(`Activating ${email} ...`);
     let userData = await redis.get(email);
     userData = JSON.parse(userData);
-
-    /* to send an email, uncomments below section */
-    // const data = {
-    //   from: "Excited User <me@samples.mailgun.org>",
-    //   to: email,
-    //   subject: "Account Activation",
-    //   text: "Your account has been activated!",
-    // };
-    // mailgun.messages().send(data);
+    const { sessionId } = userData;
+    delete userData.sessionId;
 
     await redis.set(
       email,
@@ -38,15 +44,23 @@ sub.on("message", async (channel, email) => {
       })
     );
 
-    pub.publish(
+    /* sending email to user */
+    // sendEmail(email)
+
+    write.xadd(
       "registration-result",
+      "*",
+      "data",
       JSON.stringify({
         status: true,
         message: "Your account has been created successfully",
-        sessionId: userData.sessionId,
+        sessionId,
       })
     );
   } catch (e) {
-    console.error(`Error => ${e.message}`);
+    console.error(e.message);
   }
-});
+  await listenForMessage(messages[messages.length - 1][0]);
+}
+
+listenForMessage();

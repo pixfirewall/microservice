@@ -1,30 +1,33 @@
 const bcrypt = require("bcrypt");
 const validator = require("validator");
 const Redis = require("ioredis");
-const sub = new Redis(6379, "redis");
-const pub = new Redis(6379, "redis");
+const read = new Redis(6379, "redis");
+const write = new Redis(6379, "redis");
 const redis = new Redis(6379, "redis");
 
-sub.subscribe("user-registration", (err, count) => {
-  if (err) console.error(`Registration failed to subscribe: ${err.message}`);
-  else
-    console.log(`Registration is currently subscribed to ${count} channels.`);
-});
+async function listenForMessage(lastId = "$") {
+  const results = await read.xread(
+    "block",
+    0,
+    "STREAMS",
+    "user-registration",
+    lastId
+  );
+  const [_, messages] = results[0];
+  const data = JSON.parse(messages[0][1][1]);
+  const { email, username, password } = data;
+  const sessionId = messages[0][0];
 
-sub.on("message", async (channel, message) => {
   try {
-    console.log(`Received on Registration  => ${message} from ${channel}`);
-
-    const { sessionId, email, username, password } = JSON.parse(message);
-
     const isValidEmail = validator.isEmail(email);
     const isValidPassword = validator.isStrongPassword(password);
     const isExist = await redis.get(email);
-    // const errorMessage =
 
     if (!isValidEmail || !isValidPassword || isExist)
-      pub.publish(
+      write.xadd(
         "registration-result",
+        "*",
+        "data",
         JSON.stringify({
           status: false,
           message: isExist
@@ -49,9 +52,12 @@ sub.on("message", async (channel, message) => {
           sessionId,
         })
       );
-      pub.publish("user-activation", email);
+      write.xadd("user-activation", "*", "data", email);
     }
   } catch (e) {
     console.error(e.message);
   }
-});
+  await listenForMessage(messages[messages.length - 1][0]);
+}
+
+listenForMessage();

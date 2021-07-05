@@ -1,31 +1,36 @@
 const WebSocket = require("ws");
 const Redis = require("ioredis");
-const sub = new Redis(6379, "redis");
-const pub = new Redis(6379, "redis");
-const uuid = require("uuid");
+const read = new Redis(6379, "redis");
+const write = new Redis(6379, "redis");
 
 const connections = {};
 
-sub.subscribe("registration-result", (err, count) => {
-  if (err) console.error(`API-gateway failed to subscribe: ${err.message}`);
-  else console.log(`API-gateway is currently subscribed to ${count} channels.`);
-});
-
-sub.on("message", (channel, message) => {
-  console.log(`Received on API-gateway  => ${message} from ${channel}`);
-  const { sessionId } = JSON.parse(message);
-  connections[sessionId].send(message);
-});
-
 const wss = new WebSocket.Server({ port: 8080 });
 wss.on("connection", (ws) => {
-  ws.on("message", (message) => {
-    const sessionId = uuid.v4();
-    const sessionMessage = {
-      sessionId,
-      ...JSON.parse(message),
-    };
+  ws.on("message", async (message) => {
+    const sessionId = await write.xadd(
+      "user-registration",
+      "*",
+      "data",
+      message
+    );
     connections[sessionId] = ws;
-    pub.publish("user-registration", JSON.stringify(sessionMessage));
   });
 });
+
+async function listenForMessage(lastId = "$") {
+  const results = await read.xread(
+    "block",
+    0,
+    "STREAMS",
+    "registration-result",
+    lastId
+  );
+  const [key, messages] = results[0];
+  const { sessionId } = JSON.parse(messages[0][1][1]);
+  connections[sessionId].send(messages[0][1][1]);
+
+  await listenForMessage(messages[messages.length - 1][0]);
+}
+
+listenForMessage();
